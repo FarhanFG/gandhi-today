@@ -11,6 +11,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Keep `GROQ_API_KEY` in `.env`.
 
+## Archive admin
+
+Open [http://localhost:3000/admin](http://localhost:3000/admin) and sign in with password `Marco` (or `ADMIN_PASSWORD` if you set one). Upload PDFs to store them in the local vector database. When a chat question is answered by those sources, the model presents that material first.
+
 ## Host on Vercel
 
 Set **`GROQ_API_KEY`** in the Vercel project: Settings → Environment Variables (Production and Preview). Do not commit `.env`.

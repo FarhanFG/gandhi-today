@@ -97,7 +97,9 @@ export function Chat() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages.map(({ role, content }) => ({ role, content })),
+        }),
         signal: controller.signal,
       });
 
@@ -116,14 +118,21 @@ export function Chat() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      const sources =
+        response.headers.get("X-RAG-Used") === "1"
+          ? response.headers.get("X-RAG-Sources") || undefined
+          : undefined;
       let assistant = "";
-      setMessages([...nextMessages, { role: "assistant", content: "" }]);
+      setMessages([...nextMessages, { role: "assistant", content: "", sources }]);
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         assistant += sanitizeOutput(decoder.decode(value, { stream: true }));
-        setMessages([...nextMessages, { role: "assistant", content: assistant }]);
+        setMessages([
+          ...nextMessages,
+          { role: "assistant", content: assistant, sources },
+        ]);
       }
     } catch (caught) {
       if ((caught as { name?: string }).name === "AbortError") return;
@@ -187,15 +196,23 @@ export function Chat() {
             </p>
           </div>
         </div>
-        {hasConversation ? (
-          <button
-            type="button"
-            onClick={reset}
-            className="font-ui mt-1 shrink-0 rounded-full border border-earth/20 bg-paper/70 px-3 py-1.5 text-xs tracking-wide text-earth transition hover:border-saffron/40 hover:text-saffron-deep"
+        <div className="mt-1 flex shrink-0 flex-col items-end gap-2">
+          <a
+            href="/admin"
+            className="font-ui rounded-full border border-earth/20 bg-paper/70 px-3 py-1.5 text-xs tracking-wide text-earth transition hover:border-saffron/40 hover:text-saffron-deep"
           >
-            New inquiry
-          </button>
-        ) : null}
+            Archive
+          </a>
+          {hasConversation ? (
+            <button
+              type="button"
+              onClick={reset}
+              className="font-ui rounded-full border border-earth/20 bg-paper/70 px-3 py-1.5 text-xs tracking-wide text-earth transition hover:border-saffron/40 hover:text-saffron-deep"
+            >
+              New inquiry
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-5 pb-4 sm:px-8">
@@ -283,6 +300,11 @@ export function Chat() {
                             }`}
                           >
                             {renderContent(message.content)}
+                            {message.sources ? (
+                              <p className="font-ui mt-3 text-[11px] tracking-wide text-earth">
+                                From the archive: {message.sources}
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </div>

@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { getSystemPrompt } from "@/lib/prompt";
+import { archiveSystemAddendum, retrieveFromArchive } from "@/lib/rag/retrieve";
 import type { ChatMessage } from "@/lib/types";
 
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
@@ -59,6 +60,23 @@ export async function POST(request: Request) {
   }
 
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  const question = messages.at(-1)!.content;
+  const hits = retrieveFromArchive(question);
+  const modelMessages: ChatMessage[] = hits.length
+    ? [
+        ...messages.slice(0, -1),
+        {
+          role: "user",
+          content: `${question}\n\nreference = ${JSON.stringify({
+            excerpts: hits.map((hit) => ({
+              source: hit.documentName,
+              page: hit.page,
+              text: hit.text,
+            })),
+          })}`,
+        },
+      ]
+    : messages;
 
   try {
     const stream = await groq.chat.completions.create({
@@ -69,8 +87,8 @@ export async function POST(request: Request) {
       include_reasoning: false,
       stream: true,
       messages: [
-        { role: "system", content: getSystemPrompt() },
-        ...messages,
+        { role: "system", content: `${getSystemPrompt()}${archiveSystemAddendum()}` },
+        ...modelMessages,
       ],
     });
 
@@ -90,10 +108,14 @@ export async function POST(request: Request) {
       },
     });
 
+    const sources = [...new Set(hits.map((hit) => hit.documentName))].join(", ");
+
     return new Response(readable, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
+        "X-RAG-Used": hits.length ? "1" : "0",
+        "X-RAG-Sources": sources,
       },
     });
   } catch (error) {
